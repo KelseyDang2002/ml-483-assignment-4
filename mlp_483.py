@@ -209,7 +209,7 @@ test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
 #train_data, val_data, test_data = random_split(train_dataset, [60,20,20])
 
 ### DataLoader will shuffle the training dataset and load the training and test dataset
-mini_batch_size = 100 #+ You can change this mini_batch_size
+mini_batch_size = 64 #+ You can change this mini_batch_size
 # If mini_batch_size==100, # of training batches=6000/100=600 batches, each batch contains 100 samples (images, labels)
 # DataLoader will load the data set, shuffle it, and partition it into a set of samples specified by mini_batch_size.
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=mini_batch_size, shuffle=True)
@@ -231,7 +231,7 @@ show_digit_image = True
 # Architectural parameters: You can change these parameters except for num_input and num_classes
 num_input = X_train.shape[1]   # 28X28=784 pixels of image
 num_classes = 2    # output layer
-num_neurons_hidden = 128     # number of neurons at the first hidden layer
+num_neurons_hidden = 64     # number of neurons at the first hidden layer
 # Randomly selected neurons by dropout_pr probability will be dropped (zeroed out) for regularization.
 dropout_pr = 0.05
 
@@ -273,7 +273,7 @@ loss_func = nn.CrossEntropyLoss(weight=weights)
 # model hyperparameters and gradient methods
 # optim.SGD performs gradient descent and update the weigths through backpropagation.
 num_epochs = 10
-alpha = 0.01       # learning rate
+alpha = 0.008       # learning rate
 gamma = 0.5        # momentum
 # Stochastic Gradient Descent (SGD) is used in this program.
 #+ You can choose other gradient methods (Adagrad, adadelta, Adam, etc.) and parameters
