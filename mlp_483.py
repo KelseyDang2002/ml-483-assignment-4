@@ -177,7 +177,7 @@ data = pd.read_csv('emails.csv')
 texts = data['text']
 labels = data['spam']
 
-# convert text to TF=IDF features
+# convert text to TF-IDF features
 vectorizer = TfidfVectorizer(max_features=5000)
 features = vectorizer.fit_transform(texts).toarray()
 
