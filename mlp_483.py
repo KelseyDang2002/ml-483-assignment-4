@@ -1,9 +1,17 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+import time
+
 import torch, torch.nn as nn, torch.optim as optim
 import torch.nn.functional as AF
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
+
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.preprocessing import LabelEncoder 
+from sklearn.metrics import accuracy_score, precision_score, confusion_matrix, classification_report, ConfusionMatrixDisplay
 
 ###################### Designing an ANN architectures #########################
 
@@ -42,25 +50,43 @@ def show_some_digit_images(images):
         plt.imshow(images[i][0], cmap='Oranges') # show ith image from image matrices by color map='Oranges'
     plt.show()
 
+# print confusion matrix with labels
+def print_confusion_matrix(cm):
+    """
+    Prints the confusion matrix with labels for clarity.
+
+    cm: 2x2 numpy array representing the confusion matrix
+    """
+    print("Confusion Matrix:")
+    print("                Predicted")
+    print("                 0      1")
+    print(f"Actual 0     TN: {cm[0, 0]:<5} FP: {cm[0, 1]:<5}")
+    print(f"       1     FN: {cm[1, 0]:<5} TP: {cm[1, 1]:<5}")
+
 # Training function
 def train_ANN_model(num_epochs, training_data, device, CUDA_enabled, ANN_model, loss_func, optimizer):
     train_losses = []
+
+    start = time.time()
     ANN_model.train() # to set the model in training mode. Only Dropout and BatchNorm care about this flag.
+    end = time.time()
+    training_time = end - start
+
     for epoch_cnt in range(num_epochs):
-        for batch_cnt, (images, labels) in enumerate(training_data):
+        for batch_cnt, (features, labels) in enumerate(training_data):
             # Each batch contain batch_size (100) images, each of which 1 channel 28x28
             # print(images.shape) # the shape of images=[100,1,28,28]
             # So, we need to flatten the images into 28*28=784
             # -1 tells NumPy to flatten to 1D (784 pixels as input) for batch_size images
             # the size -1 is inferred from other dimensions
-            images = images.reshape(-1, 784) # or images.view(-1, 784) or torch.flatten(images, start_dim=1)
+            # images = images.reshape(-1, 784) # or images.view(-1, 784) or torch.flatten(images, start_dim=1)
 
             if (device.type == 'cuda' and CUDA_enabled):
-                images = images.to(device) # moving tensors to device
+                features = features.to(device) # moving tensors to device
                 labels = labels.to(device)
 
             optimizer.zero_grad() # set the cumulated gradient to zero
-            output = ANN_model(images) # feedforward images as input to the network
+            output = ANN_model(features) # feedforward images as input to the network
             loss = loss_func(output, labels) # computing loss
             #print("Loss: ", loss)
             #print("Loss item: ", loss.item())
@@ -70,35 +96,38 @@ def train_ANN_model(num_epochs, training_data, device, CUDA_enabled, ANN_model, 
             optimizer.step() # updating all parameters after every iteration through backpropagation
 
             # Display the training status
-            if (batch_cnt+1) % mini_batch_size == 0:
-                print(f"Epoch={epoch_cnt+1}/{num_epochs}, batch={batch_cnt+1}/{num_train_batches}, loss={loss.item()}")
-    return train_losses
+            if (batch_cnt+1) % 10 == 0:
+                # print(f"Epoch={epoch_cnt+1}/{num_epochs}, batch={batch_cnt+1}/{num_train_batches}, loss={loss.item()}")
+                print(f"Epoch={epoch_cnt+1}/{num_epochs}, batch={batch_cnt+1}, loss={loss.item()}")
+    return train_losses, training_time
 
 # Testing function
 def test_ANN_model(device, CUDA_enabled, ANN_model, testing_data):
     # torch.no_grad() is a decorator for the step method
     # making "require_grad" false since no need to keeping track of gradients    
-    predicted_digits=[]
+    predicted_labels=[]
+    true_labels = []
     # torch.no_grad() deactivates Autogra engine (for weight updates). This help run faster
     with torch.no_grad():
         ANN_model.eval() # # set the model in testing mode. Only Dropout and BatchNorm care about this flag.
-        for batch_cnt, (images, labels) in enumerate(testing_data):
-            images = images.reshape(-1, 784) # or images.view(-1, 784) or torch.flatten(images, start_dim=1)
+        for batch_cnt, (features, labels) in enumerate(testing_data):
+            # images = images.reshape(-1, 784) # or images.view(-1, 784) or torch.flatten(images, start_dim=1)
 
             if (device.type == 'cuda' and CUDA_enabled):
-                images = images.to(device) # moving tensors to device
+                features = features.to(device) # moving tensors to device
                 labels = labels.to(device)
             
-            output = ANN_model(images)
-            _, prediction = torch.max(output,1) # returns the max value of all elements in the input tensor
-            predicted_digits.append(prediction)
+            output = ANN_model(features)
+            _, predictions = torch.max(output,1) # returns the max value of all elements in the input tensor
+            predicted_labels.extend(predictions.cpu().numpy())
             num_samples = labels.shape[0]
-            num_correct = (prediction==labels).sum().item()
+            true_labels.extend(labels.cpu().numpy())
+            num_correct = (predictions == labels).sum().item()
             accuracy = num_correct/num_samples
             if (batch_cnt+1) % mini_batch_size == 0:
                 print(f"batch={batch_cnt+1}/{num_test_batches}")
         print("> Number of samples=", num_samples, "number of correct prediction=", num_correct, "accuracy=", accuracy)
-    return predicted_digits
+    return predicted_labels, true_labels
 
 ########################### Checking GPU and setup #########################
 ### CUDA is a parallel computing platform and toolkit developed by NVIDIA. 
@@ -128,7 +157,7 @@ else:
 # of the color in the range [0,255] that are scaled down to a range [0,1]. The image is now a Torch Tensor (array object)
 ### Normalize the tensor: transforms.Normalize() normalizes the tensor with mean (0.5) and stdev (0.5)
 #+ You can change the mean and stdev values
-print("------------------ANN modeling---------------------------")
+print("\n------------------ANN modeling---------------------------")
 transforms = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,),(0.5,)),])
 # PyTorch tensors are like NumPy arrays that can run on GPU
 # e.g., x = torch.randn(64,100).type(dtype) # need to cast tensor to a CUDA datatype (dtype)
@@ -139,11 +168,41 @@ x = Variable
 ### Download and load the dataset from the torch vision library to the directory specified by root=''
 # MNIST is a collection of 7000 handwritten digits (in images) split into 60000 training images and 1000 for testing 
 # PyTorch library provides a clean data set. The following command will download training data in directory './data'
-train_dataset=datasets.MNIST(root='./data', train=True, transform=transforms, download=True)
-test_dataset=datasets.MNIST(root='./data', train=False, transform=transforms, download=False)
-print("> Shape of training data:", train_dataset.data.shape)
-print("> Shape of testing data:", test_dataset.data.shape)
-print("> Classes:", train_dataset.classes)
+
+############################# MODIFIED ################################
+# load dataset
+data = pd.read_csv('emails.csv')
+
+# extract features (text) and labels (spam)
+texts = data['text']
+labels = data['spam']
+
+# convert text to TF=IDF features
+vectorizer = TfidfVectorizer(max_features=5000)
+features = vectorizer.fit_transform(texts).toarray()
+
+# encode labels (optional is already 0/1)
+label_encoder = LabelEncoder()
+encoded_labels = label_encoder.fit_transform(labels)
+
+# split training and testing data
+X_train, X_test, y_train, y_test = train_test_split(features, encoded_labels, test_size=0.2, random_state=0)
+
+# convert to PyTorch tensors
+X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
+y_train_tensor = torch.tensor(y_train, dtype=torch.long) # CrossEntropyLoss expects LongTensor
+X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
+y_test_tensor = torch.tensor(y_test, dtype=torch.long)
+
+# create TensorDataset
+train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+
+# train_dataset=datasets.MNIST(root='./data', train=True, transform=transforms, download=True)
+# test_dataset=datasets.MNIST(root='./data', train=False, transform=transforms, download=False)
+# print("> Shape of training data:", train_dataset.data.shape)
+# print("> Shape of testing data:", test_dataset.data.shape)
+# print("> Classes:", train_dataset.classes)
 
 # You can use random_split function to splite a dataset
 #from torch.utils.data.dataset import random_split
@@ -153,8 +212,8 @@ print("> Classes:", train_dataset.classes)
 mini_batch_size = 100 #+ You can change this mini_batch_size
 # If mini_batch_size==100, # of training batches=6000/100=600 batches, each batch contains 100 samples (images, labels)
 # DataLoader will load the data set, shuffle it, and partition it into a set of samples specified by mini_batch_size.
-train_dataloader=DataLoader(dataset=train_dataset, batch_size=mini_batch_size, shuffle=True)
-test_dataloader=DataLoader(dataset=test_dataset, batch_size=mini_batch_size, shuffle=True)
+train_dataloader = DataLoader(dataset=train_dataset, batch_size=mini_batch_size, shuffle=True)
+test_dataloader = DataLoader(dataset=test_dataset, batch_size=mini_batch_size, shuffle=False)
 num_train_batches = len(train_dataloader)
 num_test_batches = len(test_dataloader)
 print("> Mini batch size: ", mini_batch_size)
@@ -165,19 +224,19 @@ print("> Number of batches loaded for testing: ", num_test_batches)
 iterable_batches = iter(train_dataloader) # making a dataset iterable
 images, labels = next(iterable_batches) # If you can call next() again, you get the next batch until no more batch left
 show_digit_image = True
-if show_digit_image:
-    show_some_digit_images(images)
+# if show_digit_image:
+#     show_some_digit_images(images)
 
 ### Create an object for the ANN model defined in the MLP class
 # Architectural parameters: You can change these parameters except for num_input and num_classes
-num_input = 28*28   # 28X28=784 pixels of image
-num_classes = 10    # output layer
-num_hidden = 10     # number of neurons at the first hidden layer
+num_input = X_train.shape[1]   # 28X28=784 pixels of image
+num_classes = 2    # output layer
+num_neurons_hidden = 128     # number of neurons at the first hidden layer
 # Randomly selected neurons by dropout_pr probability will be dropped (zeroed out) for regularization.
 dropout_pr = 0.05
 
 # MLP model
-MLP_model=MLP(num_input, num_hidden, num_classes)
+MLP_model = MLP(num_input, num_neurons_hidden, num_classes)
 # Some model properties: 
 # .state_dic(): a dictionary of trainable parameters with their current valeus
 # .parameter(): a list of all trainable parameters in the model
@@ -206,7 +265,7 @@ loss_func = nn.CrossEntropyLoss()
 ### Choose a gradient method
 # model hyperparameters and gradient methods
 # optim.SGD performs gradient descent and update the weigths through backpropagation.
-num_epochs = 1
+num_epochs = 10
 alpha = 0.01       # learning rate
 gamma = 0.5        # momentum
 # Stochastic Gradient Descent (SGD) is used in this program.
@@ -217,14 +276,28 @@ for var_name in MLP_optimizer.state_dict():
     print(var_name, MLP_optimizer.state_dict()[var_name])
 
 ### Train your networks
-print("............Training MLP................")
-train_loss=train_ANN_model(num_epochs, train_dataloader, device, CUDA_enabled, MLP_model, loss_func, MLP_optimizer)
-print("............Testing MLP model................")
-print("> Input digits:")
+print("\n............Training MLP................")
+train_loss, training_time = train_ANN_model(num_epochs, train_dataloader, device, CUDA_enabled, MLP_model, loss_func, MLP_optimizer)
+print(f"\nTraining Time: {training_time} seconds")
+print("\n............Testing MLP model................")
+print("\n> Input labels:")
 print(labels)
-predicted_digits=test_ANN_model(device, CUDA_enabled, MLP_model, test_dataloader)
-print("> Predicted digits by MLP model")
-print(predicted_digits)
+predicted_labels, true_labels = test_ANN_model(device, CUDA_enabled, MLP_model, test_dataloader)
+
+print("Performance Results:")
+accuracy = accuracy_score(true_labels, predicted_labels)
+precision = precision_score(true_labels, predicted_labels, zero_division=1)
+cm = confusion_matrix(true_labels, predicted_labels)
+cr = classification_report(true_labels, predicted_labels)
+print(f"\nAccuracy: {accuracy}")
+print(f"Precision: {precision}")
+print_confusion_matrix(cm)
+print(f"\nClassification Report:\n{cr}")
+
+print("\n> Predicted labels by MLP model")
+print(predicted_labels)
+print("> True labels by MLP model")
+print(true_labels)
 
 #### To save and load models and model's parameters ####
 # To save and load model parameters
