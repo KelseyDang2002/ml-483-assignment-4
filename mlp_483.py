@@ -126,7 +126,7 @@ def test_ANN_model(device, CUDA_enabled, ANN_model, testing_data):
             accuracy = num_correct/num_samples
             if (batch_cnt+1) % mini_batch_size == 0:
                 print(f"batch={batch_cnt+1}/{num_test_batches}")
-        print("> Number of samples=", num_samples, "number of correct prediction=", num_correct, "accuracy=", accuracy)
+        print("> Number of samples =", num_samples, "\nnumber of correct prediction =", num_correct, "\naccuracy =", accuracy)
     return predicted_labels, true_labels
 
 ########################### Checking GPU and setup #########################
@@ -266,7 +266,6 @@ w0 = total_samples / (2 * class_counts[0])
 w1 = total_samples / (2 * class_counts[1])
 # print(f"w0 = {w0}, w1 = {w1}\n")
 weights = torch.tensor([w0, w1], dtype=torch.float32).to(device)
-print(f"\nClass weights: {weights}\n")
 
 loss_func = nn.CrossEntropyLoss(weight=weights)
 
@@ -292,11 +291,24 @@ print("\n> Input labels:")
 print(labels)
 predicted_labels, true_labels = test_ANN_model(device, CUDA_enabled, MLP_model, test_dataloader)
 
-print("Performance Results:")
+print("\n................Performance Results...................")
+print(f"Parameters:")
+print(f"\tMini batch size: {mini_batch_size}")
+print(f"\tNumber of batches loaded for training: {num_train_batches}")
+print(f"\tNumber of batches loaded for testing: {num_test_batches}\n")
+print(f"\tLoss Function: Cross Entropy Loss")
+print(f"\tClass Weights: {weights}")
+print(f"\tNumber of classes: {num_classes}")
+print(f"\tNeurons: {num_neurons_hidden}")
+print(f"\tEpochs: {num_epochs}")
+print(f"\tLearning Rate: {alpha}")
+print(f"\tGamma (momentum): {gamma}")
+
 accuracy = accuracy_score(true_labels, predicted_labels)
 precision = precision_score(true_labels, predicted_labels, zero_division=1)
 cm = confusion_matrix(true_labels, predicted_labels)
 cr = classification_report(true_labels, predicted_labels)
+
 print(f"\nAccuracy: {accuracy}")
 print(f"Precision: {precision}")
 print_confusion_matrix(cm)
