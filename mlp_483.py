@@ -260,7 +260,15 @@ else:
     print("...Modeling using CPU...")
 
 ### Define a loss function: You can choose other loss functions
-loss_func = nn.CrossEntropyLoss()
+class_counts = np.bincount(y_train)
+total_samples = len(y_train)
+w0 = total_samples / (2 * class_counts[0])
+w1 = total_samples / (2 * class_counts[1])
+# print(f"w0 = {w0}, w1 = {w1}\n")
+weights = torch.tensor([w0, w1], dtype=torch.float32).to(device)
+print(f"\nClass weights: {weights}\n")
+
+loss_func = nn.CrossEntropyLoss(weight=weights)
 
 ### Choose a gradient method
 # model hyperparameters and gradient methods
